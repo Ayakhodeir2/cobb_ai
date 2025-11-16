@@ -23,4 +23,8 @@ weights/
 # FastAPI uploads
 uploads/
 
+# Frontend: ignore build artifacts, NOT the whole folder
 cobb-ai-frontend/node_modules/
+cobb-ai-frontend/.cache/
+cobb-ai-frontend/dist/
+cobb-ai-frontend/build/
