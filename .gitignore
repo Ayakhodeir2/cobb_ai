@@ -14,7 +14,6 @@ venv/
 
 # Model weights (keep these local; don't push to GitHub)
 weights/
-# If you want them tracked later with Git LFS, remove the line above.
 
 # Cache / logs
 .cache/
