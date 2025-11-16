@@ -1,0 +1,25 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment (DO NOT TRACK)
+.venv/
+env/
+venv/
+
+# OS junk
+.DS_Store
+
+# Model weights (keep these local; don't push to GitHub)
+weights/
+# If you want them tracked later with Git LFS, remove the line above.
+
+# Cache / logs
+.cache/
+*.log
+
+# FastAPI uploads
+uploads/
+
