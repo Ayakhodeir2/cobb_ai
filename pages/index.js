@@ -11,7 +11,8 @@ const ClinicalCobbInterface = dynamic(
         alignItems: 'center', 
         height: '100vh',
         fontSize: '18px',
-        fontFamily: 'system-ui'
+        fontFamily: 'system-ui, sans-serif',
+        color: '#64748b'
       }}>
         Loading Clinical Interface...
       </div>
