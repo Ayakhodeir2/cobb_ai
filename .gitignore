@@ -1,29 +1,44 @@
-# Python bytecode
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
+# dependencies
+/node_modules
+/.pnp
+.pnp.js
 
-# Virtual environment (DO NOT TRACK)
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local env files
+.env*.local
+.env
+
+# vercel
+.vercel
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
 .venv/
 env/
-venv/
+ENV/
 
-# OS junk
-.DS_Store
-
-# Model weights (keep these local; don't push to GitHub)
-weights/
-
-# Cache / logs
-.cache/
-*.log
-
-# FastAPI uploads
-uploads/
-
-# Frontend: ignore build artifacts, NOT the whole folder
-cobb-ai-frontend/node_modules/
-cobb-ai-frontend/.cache/
-cobb-ai-frontend/dist/
-cobb-ai-frontend/build/
+# model weights (already in repo)
+# weights/
