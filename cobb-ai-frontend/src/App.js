@@ -1,550 +1,430 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Send, Activity, Brain, AlertCircle, CheckCircle, Loader, Sparkles, X } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { Upload, X, Activity, AlertCircle, CheckCircle, Loader, FileImage } from 'lucide-react';
 
-const CobbAIChatInterface = () => {
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      type: 'ai',
-      content: "Hello! I'm your Cobb Angle AI Assistant. I can analyze spine X-ray images to detect scoliosis and measure Cobb angles. Upload an X-ray image to get started!",
-      timestamp: new Date()
-    }
-  ]);
-  const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
+const ClinicalCobbInterface = () => {
+  const [uploadedImages, setUploadedImages] = useState([]);
+  const [results, setResults] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const addMessage = (type, content, data = null) => {
-    const newMessage = {
-      id: Date.now(),
-      type,
-      content,
-      data,
-      timestamp: new Date()
-    };
-    setMessages(prev => [...prev, newMessage]);
-  };
-
   const handleImageUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        addMessage('user', `Uploaded X-ray image: ${file.name}`, {
-          type: 'image',
-          preview: e.target.result
-        });
-        
-        setTimeout(() => analyzeImage(file), 500);
-      };
-      reader.readAsDataURL(file);
-    }
+    const files = Array.from(e.target.files);
+    const newImages = files.map(file => ({
+      id: Date.now() + Math.random(),
+      file,
+      preview: URL.createObjectURL(file),
+      name: file.name,
+      status: 'pending'
+    }));
+    
+    setUploadedImages(prev => [...prev, ...newImages]);
+    analyzeImages([...uploadedImages, ...newImages]);
   };
 
-  const analyzeImage = async (file) => {
+  const removeImage = (id) => {
+    setUploadedImages(prev => prev.filter(img => img.id !== id));
+    setResults(prev => prev.filter(r => r.imageId !== id));
+  };
+
+  const analyzeImages = async (images) => {
     setIsAnalyzing(true);
-    setIsTyping(true);
+    
+    const pendingImages = images.filter(img => img.status === 'pending');
+    
+    for (const image of pendingImages) {
+      try {
+        const formData = new FormData();
+        formData.append('files', image.file);
 
-    addMessage('ai', 'Analyzing your X-ray image... This may take a few moments.', {
-      type: 'status',
-      status: 'analyzing'
-    });
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000';
+        const response = await fetch(`${apiUrl}/predict_cobb`, {
+          method: 'POST',
+          body: formData
+        });
 
-    try {
-      const formData = new FormData();
-      formData.append('files', file);
+        if (!response.ok) {
+          throw new Error('Analysis failed');
+        }
 
-      const response = await fetch('http://127.0.0.1:8000/predict_cobb', {
-        method: 'POST',
-        body: formData
-      });
+        const data = await response.json();
+        const result = data.results[0];
 
-      if (!response.ok) {
-        throw new Error('Analysis failed');
+        // Ensure no negative angles are displayed
+        const thoracic = Math.max(0, result.thoracic_cobb_deg || result.thoracic || 0);
+        const lumbar = Math.max(0, result.lumbar_cobb_deg || result.lumbar || 0);
+
+        setResults(prev => [...prev, {
+          imageId: image.id,
+          filename: result.filename,
+          thoracic: thoracic,
+          lumbar: lumbar,
+          timestamp: new Date()
+        }]);
+
+        setUploadedImages(prev => prev.map(img => 
+          img.id === image.id ? { ...img, status: 'completed' } : img
+        ));
+
+      } catch (error) {
+        console.error('Analysis error:', error);
+        setUploadedImages(prev => prev.map(img => 
+          img.id === image.id ? { ...img, status: 'error' } : img
+        ));
       }
-
-      const data = await response.json();
-      const result = data.results[0];
-
-      setIsTyping(false);
-      setIsAnalyzing(false);
-
-      addMessage('ai', 'Analysis complete! Here are the results:', {
-        type: 'results',
-        thoracic: result.thoracic_cobb_deg,
-        lumbar: result.lumbar_cobb_deg,
-        filename: result.filename
-      });
-
-    } catch (error) {
-      setIsTyping(false);
-      setIsAnalyzing(false);
-      addMessage('ai', `Sorry, I encountered an error: ${error.message}. Please make sure the backend is running and try again.`, {
-        type: 'error'
-      });
     }
+    
+    setIsAnalyzing(false);
   };
 
-  const handleSendMessage = () => {
-    if (!inputText.trim()) return;
-
-    addMessage('user', inputText);
-    const userMessage = inputText.toLowerCase();
-    setInputText('');
-    setIsTyping(true);
-
-    setTimeout(() => {
-      let response = '';
-      
-      if (userMessage.includes('hello') || userMessage.includes('hi')) {
-        response = "Hello! Ready to analyze spine X-rays. Please upload an image to get started.";
-      } else if (userMessage.includes('how') && userMessage.includes('work')) {
-        response = "I use advanced deep learning models (U-Net for segmentation and ResNet50 for angle detection) to analyze spine X-rays. Just upload an image, and I'll measure the thoracic and lumbar Cobb angles automatically!";
-      } else if (userMessage.includes('cobb') || userMessage.includes('angle')) {
-        response = "The Cobb angle is the standard measurement for assessing scoliosis severity. It measures the angle of spinal curvature. Angles >10° indicate scoliosis, with >25° often requiring treatment.";
-      } else if (userMessage.includes('upload') || userMessage.includes('image')) {
-        response = "Click the upload button (📎 icon) to select your X-ray image. I support PNG, JPG, and JPEG formats.";
-      } else {
-        response = "I'm specialized in analyzing spine X-rays for Cobb angle measurement. Upload an X-ray image to get started, or ask me about how the analysis works!";
-      }
-      
-      setIsTyping(false);
-      addMessage('ai', response);
-    }, 1000);
-  };
-
-  const getSeverityInfo = (thoracic, lumbar) => {
+  const getSeverityLevel = (thoracic, lumbar) => {
     const maxAngle = Math.max(thoracic, lumbar);
     
     if (maxAngle < 10) {
-      return { level: 'Normal', color: '#059669', bg: '#d1fae5' };
+      return { level: 'Normal', color: '#10b981', bg: '#d1fae5', textColor: '#065f46' };
     } else if (maxAngle < 25) {
-      return { level: 'Mild Scoliosis', color: '#d97706', bg: '#fef3c7' };
+      return { level: 'Mild Scoliosis', color: '#f59e0b', bg: '#fef3c7', textColor: '#92400e' };
     } else if (maxAngle < 40) {
-      return { level: 'Moderate Scoliosis', color: '#ea580c', bg: '#fed7aa' };
+      return { level: 'Moderate Scoliosis', color: '#f97316', bg: '#ffedd5', textColor: '#9a3412' };
     } else {
-      return { level: 'Severe Scoliosis', color: '#dc2626', bg: '#fee2e2' };
+      return { level: 'Severe Scoliosis', color: '#ef4444', bg: '#fee2e2', textColor: '#991b1b' };
     }
-  };
-
-  const renderMessage = (message) => {
-    const messageContainerStyle = {
-      display: 'flex',
-      justifyContent: message.type === 'user' ? 'flex-end' : 'flex-start',
-      marginBottom: '1rem',
-      animation: 'fadeIn 0.3s ease-out'
-    };
-
-    if (message.type === 'user') {
-      return (
-        <div key={message.id} style={messageContainerStyle}>
-          <div style={{ maxWidth: '70%' }}>
-            {message.data?.type === 'image' && (
-              <div style={{ marginBottom: '0.5rem' }}>
-                <img 
-                  src={message.data.preview} 
-                  alt="Uploaded X-ray" 
-                  style={{
-                    borderRadius: '12px',
-                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                    maxHeight: '256px',
-                    width: 'auto'
-                  }}
-                />
-              </div>
-            )}
-            <div style={{
-              background: 'linear-gradient(135deg, #2563eb 0%, #1e40af 100%)',
-              color: 'white',
-              borderRadius: '18px',
-              borderTopRightRadius: '4px',
-              padding: '12px 16px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}>
-              <p style={{ fontSize: '14px', margin: 0 }}>{message.content}</p>
-            </div>
-            <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px', textAlign: 'right' }}>
-              {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <div key={message.id} style={messageContainerStyle}>
-        <div style={{ display: 'flex', flexShrink: 0, marginRight: '12px' }}>
-          <div style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #a855f7 0%, #3b82f6 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-          }}>
-            <Brain size={20} color="white" />
-          </div>
-        </div>
-        <div style={{ maxWidth: '70%' }}>
-          <div style={{
-            background: 'white',
-            borderRadius: '18px',
-            borderTopLeftRadius: '4px',
-            padding: '12px 16px',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-            border: '1px solid #e5e7eb'
-          }}>
-            {message.data?.type === 'results' ? (
-              <div>
-                <p style={{ fontSize: '14px', color: '#374151', fontWeight: '500', marginBottom: '12px' }}>
-                  {message.content}
-                </p>
-                
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {/* Thoracic */}
-                  <div style={{
-                    background: 'linear-gradient(135deg, #dbeafe 0%, #e0e7ff 100%)',
-                    borderRadius: '12px',
-                    padding: '16px',
-                    border: '1px solid #bfdbfe'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: '600', color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Thoracic Cobb Angle
-                      </span>
-                      <Activity size={16} color="#2563eb" />
-                    </div>
-                    <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#1e3a8a' }}>
-                      {message.data.thoracic.toFixed(1)}°
-                    </span>
-                  </div>
-
-                  {/* Lumbar */}
-                  <div style={{
-                    background: 'linear-gradient(135deg, #fae8ff 0%, #fce7f3 100%)',
-                    borderRadius: '12px',
-                    padding: '16px',
-                    border: '1px solid #e9d5ff'
-                  }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                      <span style={{ fontSize: '11px', fontWeight: '600', color: '#9333ea', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                        Lumbar Cobb Angle
-                      </span>
-                      <Activity size={16} color="#9333ea" />
-                    </div>
-                    <span style={{ fontSize: '28px', fontWeight: 'bold', color: '#581c87' }}>
-                      {message.data.lumbar.toFixed(1)}°
-                    </span>
-                  </div>
-
-                  {/* Severity */}
-                  {(() => {
-                    const severity = getSeverityInfo(message.data.thoracic, message.data.lumbar);
-                    const Icon = severity.level === 'Normal' ? CheckCircle : AlertCircle;
-                    return (
-                      <div style={{
-                        backgroundColor: severity.bg,
-                        borderRadius: '12px',
-                        padding: '16px',
-                        border: '1px solid #e5e7eb'
-                      }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <Icon size={20} color={severity.color} />
-                          <div>
-                            <p style={{ fontSize: '11px', color: '#6b7280', fontWeight: '500', margin: 0 }}>Assessment</p>
-                            <p style={{ fontSize: '18px', fontWeight: 'bold', color: severity.color, margin: 0 }}>
-                              {severity.level}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-
-                <div style={{ paddingTop: '12px', borderTop: '1px solid #e5e7eb', marginTop: '12px' }}>
-                  <p style={{ fontSize: '11px', color: '#6b7280', fontStyle: 'italic', margin: 0 }}>
-                    Note: This is an AI-generated analysis. Please consult a healthcare professional for medical diagnosis and treatment decisions.
-                  </p>
-                </div>
-              </div>
-            ) : message.data?.type === 'status' ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <Loader size={20} color="#3b82f6" style={{ animation: 'spin 1s linear infinite' }} />
-                <p style={{ fontSize: '14px', color: '#374151', margin: 0 }}>{message.content}</p>
-              </div>
-            ) : message.data?.type === 'error' ? (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <AlertCircle size={20} color="#ef4444" />
-                <p style={{ fontSize: '14px', color: '#374151', margin: 0 }}>{message.content}</p>
-              </div>
-            ) : (
-              <p style={{ fontSize: '14px', color: '#374151', margin: 0 }}>{message.content}</p>
-            )}
-          </div>
-          <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '4px' }}>
-            {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </p>
-        </div>
-      </div>
-    );
   };
 
   return (
     <div style={{
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #f8fafc 0%, #dbeafe 50%, #e0e7ff 100%)',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '16px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+      background: '#f8fafc',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+      padding: '24px'
     }}>
       <div style={{
-        width: '100%',
-        maxWidth: '1000px',
-        height: '90vh',
-        background: 'white',
-        borderRadius: '24px',
-        boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
-        overflow: 'hidden',
-        display: 'flex',
-        flexDirection: 'column',
-        border: '1px solid #e5e7eb'
+        maxWidth: '1400px',
+        margin: '0 auto'
       }}>
         
         {/* Header */}
         <div style={{
-          background: 'linear-gradient(135deg, #2563eb 0%, #4f46e5 50%, #7c3aed 100%)',
-          color: 'white',
-          padding: '20px 24px',
-          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+          background: 'white',
+          borderRadius: '12px',
+          padding: '24px',
+          marginBottom: '24px',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+          borderLeft: '4px solid #3b82f6'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{
-                width: '40px',
-                height: '40px',
-                borderRadius: '50%',
-                background: 'rgba(255,255,255,0.2)',
-                backdropFilter: 'blur(10px)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Brain size={24} />
-              </div>
-              <div>
-                <h1 style={{ fontSize: '20px', fontWeight: 'bold', margin: 0 }}>Cobb Angle AI</h1>
-                <p style={{ fontSize: '12px', color: '#bfdbfe', margin: 0 }}>Intelligent Scoliosis Detection</p>
-              </div>
-            </div>
-            <Sparkles size={24} color="#fde047" style={{ animation: 'pulse 2s infinite' }} />
+          <div>
+            <h1 style={{ 
+              fontSize: '28px', 
+              fontWeight: '700', 
+              color: '#1e293b', 
+              margin: '0 0 8px 0' 
+            }}>
+              Cobb Angle Measurement System
+            </h1>
+            <p style={{ 
+              fontSize: '14px', 
+              color: '#64748b', 
+              margin: 0 
+            }}>
+              AI-powered scoliosis detection and measurement tool for clinical use
+            </p>
           </div>
         </div>
 
-        {/* Messages Area */}
-        <div style={{
-          flex: 1,
-          overflowY: 'auto',
-          padding: '24px',
-          background: 'linear-gradient(to bottom, rgba(249,250,251,0.5) 0%, transparent 100%)'
-        }}>
-          {messages.map(renderMessage)}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '24px' }}>
           
-          {isTyping && (
-            <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', flexShrink: 0, marginRight: '12px' }}>
-                <div style={{
-                  width: '40px',
-                  height: '40px',
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #a855f7 0%, #3b82f6 100%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                }}>
-                  <Brain size={20} color="white" />
-                </div>
+          {/* Main Content */}
+          <div>
+            {/* Upload Section */}
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '32px',
+              marginBottom: '24px',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              textAlign: 'center'
+            }}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageUpload}
+                style={{ display: 'none' }}
+              />
+              
+              <div style={{
+                border: '2px dashed #cbd5e1',
+                borderRadius: '12px',
+                padding: '48px 24px',
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                background: '#f8fafc'
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = '#3b82f6';
+                e.currentTarget.style.background = '#eff6ff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = '#cbd5e1';
+                e.currentTarget.style.background = '#f8fafc';
+              }}>
+                <Upload size={48} color="#3b82f6" style={{ margin: '0 auto 16px' }} />
+                <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#1e293b', margin: '0 0 8px 0' }}>
+                  Upload X-ray Images
+                </h3>
+                <p style={{ fontSize: '14px', color: '#64748b', margin: 0 }}>
+                  Click to browse or drag and drop • Multiple images supported
+                </p>
               </div>
+            </div>
+
+            {/* Results Grid */}
+            {uploadedImages.length > 0 && (
               <div style={{
                 background: 'white',
-                borderRadius: '18px',
-                borderTopLeftRadius: '4px',
-                padding: '12px 16px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
-                border: '1px solid #e5e7eb'
+                borderRadius: '12px',
+                padding: '24px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
               }}>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <div style={{ width: '8px', height: '8px', background: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite' }}></div>
-                  <div style={{ width: '8px', height: '8px', background: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite 0.15s' }}></div>
-                  <div style={{ width: '8px', height: '8px', background: '#9ca3af', borderRadius: '50%', animation: 'bounce 1s infinite 0.3s' }}></div>
+                <h2 style={{ fontSize: '20px', fontWeight: '600', color: '#1e293b', margin: '0 0 20px 0' }}>
+                  Analysis Results
+                </h2>
+                
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(350px, 1fr))', gap: '20px' }}>
+                  {uploadedImages.map(image => {
+                    const result = results.find(r => r.imageId === image.id);
+                    const severity = result ? getSeverityLevel(result.thoracic, result.lumbar) : null;
+                    
+                    return (
+                      <div key={image.id} style={{
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '12px',
+                        overflow: 'hidden',
+                        transition: 'all 0.2s'
+                      }}>
+                        {/* Image Preview */}
+                        <div style={{ position: 'relative', background: '#000' }}>
+                          <img 
+                            src={image.preview} 
+                            alt={image.name}
+                            style={{
+                              width: '100%',
+                              height: '200px',
+                              objectFit: 'contain'
+                            }}
+                          />
+                          <button
+                            onClick={() => removeImage(image.id)}
+                            style={{
+                              position: 'absolute',
+                              top: '8px',
+                              right: '8px',
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              background: 'rgba(0,0,0,0.6)',
+                              border: 'none',
+                              cursor: 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              transition: 'all 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(239,68,68,0.9)'}
+                            onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(0,0,0,0.6)'}
+                          >
+                            <X size={18} color="white" />
+                          </button>
+                        </div>
+
+                        {/* Results */}
+                        <div style={{ padding: '16px' }}>
+                          <div style={{ 
+                            fontSize: '12px', 
+                            color: '#64748b', 
+                            marginBottom: '12px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                          }}>
+                            <FileImage size={14} />
+                            {image.name}
+                          </div>
+
+                          {image.status === 'pending' && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '16px',
+                              background: '#eff6ff',
+                              borderRadius: '8px'
+                            }}>
+                              <Loader size={20} color="#3b82f6" style={{ animation: 'spin 1s linear infinite' }} />
+                              <span style={{ fontSize: '14px', color: '#1e40af' }}>Analyzing...</span>
+                            </div>
+                          )}
+
+                          {image.status === 'error' && (
+                            <div style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '12px',
+                              padding: '16px',
+                              background: '#fee2e2',
+                              borderRadius: '8px'
+                            }}>
+                              <AlertCircle size={20} color="#ef4444" />
+                              <span style={{ fontSize: '14px', color: '#991b1b' }}>Analysis failed</span>
+                            </div>
+                          )}
+
+                          {result && (
+                            <div>
+                              {/* Measurements */}
+                              <div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+                                <div style={{
+                                  flex: 1,
+                                  background: '#eff6ff',
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #bfdbfe'
+                                }}>
+                                  <div style={{ 
+                                    fontSize: '11px', 
+                                    color: '#1e40af', 
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px',
+                                    marginBottom: '4px'
+                                  }}>
+                                    Thoracic
+                                  </div>
+                                  <div style={{ 
+                                    fontSize: '24px', 
+                                    fontWeight: '700', 
+                                    color: '#1e3a8a',
+                                    display: 'flex',
+                                    alignItems: 'baseline',
+                                    gap: '4px'
+                                  }}>
+                                    {result.thoracic.toFixed(1)}
+                                    <span style={{ fontSize: '16px', fontWeight: '500' }}>°</span>
+                                  </div>
+                                </div>
+
+                                <div style={{
+                                  flex: 1,
+                                  background: '#faf5ff',
+                                  padding: '12px',
+                                  borderRadius: '8px',
+                                  border: '1px solid #e9d5ff'
+                                }}>
+                                  <div style={{ 
+                                    fontSize: '11px', 
+                                    color: '#7c3aed', 
+                                    fontWeight: '600',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.5px',
+                                    marginBottom: '4px'
+                                  }}>
+                                    Lumbar
+                                  </div>
+                                  <div style={{ 
+                                    fontSize: '24px', 
+                                    fontWeight: '700', 
+                                    color: '#581c87',
+                                    display: 'flex',
+                                    alignItems: 'baseline',
+                                    gap: '4px'
+                                  }}>
+                                    {result.lumbar.toFixed(1)}
+                                    <span style={{ fontSize: '16px', fontWeight: '500' }}>°</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Severity Badge */}
+                              <div style={{
+                                background: severity.bg,
+                                padding: '12px',
+                                borderRadius: '8px',
+                                border: `1px solid ${severity.color}`,
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                              }}>
+                                {severity.level === 'Normal' ? (
+                                  <CheckCircle size={18} color={severity.color} />
+                                ) : (
+                                  <AlertCircle size={18} color={severity.color} />
+                                )}
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontSize: '11px', color: severity.textColor, fontWeight: '500' }}>
+                                    Assessment
+                                  </div>
+                                  <div style={{ fontSize: '14px', fontWeight: '700', color: severity.textColor }}>
+                                    {severity.level}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
-          )}
-          <div ref={messagesEndRef} />
+            )}
+
+            {/* Info Notice */}
+            {uploadedImages.length === 0 && (
+              <div style={{
+                background: 'white',
+                borderRadius: '12px',
+                padding: '24px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+              }}>
+                <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#1e293b', margin: '0 0 12px 0' }}>
+                  About This Tool
+                </h3>
+                <ul style={{ fontSize: '14px', color: '#64748b', lineHeight: '1.8', margin: 0, paddingLeft: '20px' }}>
+                  <li>Automated Cobb angle measurement using deep learning (U-Net + ResNet50)</li>
+                  <li>Measures both thoracic and lumbar curvature from AP spine X-rays</li>
+                  <li>Results typically available within 2-3 seconds per image</li>
+                  <li>All measurements should be verified by a qualified healthcare professional</li>
+                  <li>Supports batch processing of multiple images for efficient workflow</li>
+                </ul>
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Input Area */}
+        {/* Footer Disclaimer */}
         <div style={{
-          borderTop: '1px solid #e5e7eb',
-          background: 'white',
-          padding: '16px'
+          background: '#fff7ed',
+          border: '1px solid #fed7aa',
+          borderRadius: '12px',
+          padding: '16px',
+          marginTop: '24px',
+          display: 'flex',
+          gap: '12px'
         }}>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px' }}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleImageUpload}
-              style={{ display: 'none' }}
-            />
-            
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isAnalyzing}
-              style={{
-                flexShrink: 0,
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)',
-                border: 'none',
-                cursor: isAnalyzing ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
-                transition: 'all 0.2s',
-                opacity: isAnalyzing ? 0.5 : 1
-              }}
-              onMouseEnter={(e) => {
-                if (!isAnalyzing) {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #e5e7eb 0%, #d1d5db 100%)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.1)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'linear-gradient(135deg, #f3f4f6 0%, #e5e7eb 100%)';
-                e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.1)';
-              }}
-            >
-              <Upload size={20} color="#374151" />
-            </button>
-
-            <div style={{ flex: 1, position: 'relative' }}>
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Ask me anything about Cobb angles or upload an X-ray..."
-                disabled={isAnalyzing}
-                style={{
-                  width: '100%',
-                  padding: '12px 40px 12px 16px',
-                  borderRadius: '12px',
-                  border: '2px solid #e5e7eb',
-                  fontSize: '14px',
-                  outline: 'none',
-                  transition: 'border-color 0.2s',
-                  backgroundColor: isAnalyzing ? '#f9fafb' : 'white',
-                  cursor: isAnalyzing ? 'not-allowed' : 'text'
-                }}
-                onFocus={(e) => e.target.style.borderColor = '#3b82f6'}
-                onBlur={(e) => e.target.style.borderColor = '#e5e7eb'}
-              />
-              {inputText && (
-                <button
-                  onClick={() => setInputText('')}
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    color: '#9ca3af',
-                    padding: '4px'
-                  }}
-                  onMouseEnter={(e) => e.currentTarget.style.color = '#6b7280'}
-                  onMouseLeave={(e) => e.currentTarget.style.color = '#9ca3af'}
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-
-            <button
-              onClick={handleSendMessage}
-              disabled={!inputText.trim() || isAnalyzing}
-              style={{
-                flexShrink: 0,
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                background: (!inputText.trim() || isAnalyzing) 
-                  ? '#e5e7eb' 
-                  : 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)',
-                border: 'none',
-                cursor: (!inputText.trim() || isAnalyzing) ? 'not-allowed' : 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                transition: 'all 0.2s',
-                opacity: (!inputText.trim() || isAnalyzing) ? 0.5 : 1
-              }}
-              onMouseEnter={(e) => {
-                if (inputText.trim() && !isAnalyzing) {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #1d4ed8 0%, #4338ca 100%)';
-                  e.currentTarget.style.boxShadow = '0 4px 6px rgba(0,0,0,0.15)';
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (inputText.trim() && !isAnalyzing) {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, #2563eb 0%, #4f46e5 100%)';
-                  e.currentTarget.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                }
-              }}
-            >
-              <Send size={20} color={(!inputText.trim() || isAnalyzing) ? '#9ca3af' : 'white'} />
-            </button>
+          <AlertCircle size={20} color="#ea580c" style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            <p style={{ fontSize: '13px', fontWeight: '600', color: '#9a3412', margin: '0 0 4px 0' }}>
+              Medical Disclaimer
+            </p>
+            <p style={{ fontSize: '13px', color: '#9a3412', margin: 0, lineHeight: '1.6' }}>
+              This AI tool is intended for screening and measurement assistance only. All measurements must be verified by a qualified healthcare professional. Do not use as the sole basis for clinical decisions.
+            </p>
           </div>
-
-          <p style={{ fontSize: '11px', color: '#9ca3af', marginTop: '12px', textAlign: 'center' }}>
-            Upload spine X-ray images for AI-powered Cobb angle analysis
-          </p>
         </div>
       </div>
 
       <style>{`
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(10px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
@@ -552,16 +432,11 @@ const CobbAIChatInterface = () => {
 
         @keyframes bounce {
           0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-8px); }
-        }
-
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.5; }
+          50% { transform: translateY(-4px); }
         }
       `}</style>
     </div>
   );
 };
 
-export default CobbAIChatInterface;
+export default ClinicalCobbInterface;
