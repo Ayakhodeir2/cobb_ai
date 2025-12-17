@@ -17,7 +17,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application files
-COPY backend_clinical.py .
+COPY backend_unet_resnet.py .
 COPY models_unet_resnet.py .
 COPY preprocessing.py .
 
@@ -27,5 +27,5 @@ COPY weights/ weights/
 # Expose port
 EXPOSE 8000
 
-# Run the application (Railway will provide PORT env var)
-CMD uvicorn backend_clinical:app --host 0.0.0.0 --port ${PORT:-8000}
+# Run the application
+CMD uvicorn backend_unet_resnet:app --host 0.0.0.0 --port ${PORT:-8000}
