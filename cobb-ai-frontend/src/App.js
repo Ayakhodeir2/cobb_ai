@@ -49,7 +49,6 @@ const ClinicalCobbInterface = () => {
         const data = await response.json();
         const result = data.results[0];
 
-        // Ensure no negative angles are displayed
         const thoracic = Math.max(0, result.thoracic_cobb_deg || result.thoracic || 0);
         const lumbar = Math.max(0, result.lumbar_cobb_deg || result.lumbar || 0);
 

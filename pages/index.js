@@ -2,7 +2,7 @@ import dynamic from 'next/dynamic';
 import { useState, useEffect } from 'react';
 
 const ClinicalCobbInterface = dynamic(
-  () => import('../components/ClinicalCobbInterface'),
+  () => import('./components/ClinicalCobbInterface'),
   { 
     ssr: false,
     loading: () => (

@@ -1,23 +1,10 @@
-import dynamic from 'next/dynamic';
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import ClinicalCobbInterface from './components/ClinicalCobbInterface';
 
-const ClinicalCobbInterface = dynamic(
-  () => import('../components/ClinicalCobbInterface'),
-  { 
-    ssr: false,
-    loading: () => (
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        height: '100vh',
-        fontSize: '18px' 
-      }}>
-        Loading Clinical Interface...
-      </div>
-    )
-  }
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+  <React.StrictMode>
+    <ClinicalCobbInterface />
+  </React.StrictMode>
 );
-
-export default function Home() {
-  return <ClinicalCobbInterface />;
-}

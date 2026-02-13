@@ -1,4 +1,3 @@
-# backend_clinical.py - Simplified Clinical Backend
 """
 Streamlined backend for clinical Cobb angle measurement.
 Fast, reliable predictions without agentic AI overhead.
@@ -19,9 +18,7 @@ from pydantic import BaseModel
 from models_unet_resnet import UNet, ResNet50Cobb
 from preprocessing import preprocess_single_image_bytes
 
-# ============================================================
-# CONFIG
-# ============================================================
+
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 UNET_WEIGHTS   = "weights/unet_scoliosis8_best.pt"
@@ -44,9 +41,7 @@ resnet_tf = transforms.Compose([
     ),
 ])
 
-# ============================================================
-# MODEL LOADING
-# ============================================================
+
 def load_unet() -> UNet:
     model = UNet(n_channels=1, n_classes=1, bilinear=True)
     state = torch.load(UNET_WEIGHTS, map_location=DEVICE)
@@ -68,9 +63,7 @@ UNET_MODEL = load_unet()
 RESNET_MODEL = load_resnet()
 print("Models loaded successfully!")
 
-# ============================================================
-# PREDICTION FUNCTIONS
-# ============================================================
+
 
 def get_spine_mask(unet: UNet, pil_img: Image.Image, thr: float = MASK_THRESH) -> np.ndarray:
     """Segment spine from X-ray using U-Net."""
@@ -105,18 +98,14 @@ def predict_cobb_angles(unet: UNet, resnet: ResNet50Cobb, img_bytes: bytes) -> T
     Returns:
         (thoracic_angle, lumbar_angle) in degrees
     """
-    # Preprocess image
     img_clahe_np = preprocess_single_image_bytes(img_bytes, apply_clahe=True)
     pil_img = Image.fromarray(img_clahe_np)
     
-    # Segment spine
     mask = get_spine_mask(unet, pil_img, thr=MASK_THRESH)
     
-    # Prepare for angle prediction
     x = preprocess_for_resnet(img_clahe_np, mask)
     x = x.unsqueeze(0).to(DEVICE)
     
-    # Predict angles
     with torch.no_grad():
         out = resnet(x)
     
@@ -124,16 +113,12 @@ def predict_cobb_angles(unet: UNet, resnet: ResNet50Cobb, img_bytes: bytes) -> T
     thoracic = float(out_np[0])
     lumbar = float(out_np[1])
     
-    # Ensure no negative angles (anatomically impossible)
     thoracic = max(0.0, thoracic)
     lumbar = max(0.0, lumbar)
     
     return thoracic, lumbar
 
 
-# ============================================================
-# API SCHEMAS
-# ============================================================
 
 class CobbResult(BaseModel):
     filename: str
@@ -143,9 +128,7 @@ class CobbResult(BaseModel):
 class CobbResponse(BaseModel):
     results: List[CobbResult]
 
-# ============================================================
-# FASTAPI APP
-# ============================================================
+
 
 app = FastAPI(title="Clinical Cobb Angle Measurement API")
 
@@ -206,7 +189,6 @@ async def predict_cobb_endpoint(files: List[UploadFile] = File(...)):
             import traceback
             traceback.print_exc()
             
-            # Return -1 for failed predictions
             results.append(CobbResult(
                 filename=f.filename,
                 thoracic_cobb_deg=-1,

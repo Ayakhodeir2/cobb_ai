@@ -6,10 +6,8 @@ import cv2
 import pandas as pd
 from tqdm import tqdm
 
-# ================== CONFIG ==================
 TARGET_H, TARGET_W = 1024, 512
 SEED = 42
-# ============================================
 
 try:
     import pydicom
@@ -23,7 +21,6 @@ def _dicom_first(v):
     try: return v[0]
     except Exception: return v
 
-# --- Core Image Processing Functions ---
 
 def clahe_enhance(img):
     """Applies CLAHE contrast enhancement."""
@@ -43,16 +40,13 @@ def resize_keep_ar_pad(img, target_h, target_w):
     left = (target_w - nw) // 2
     canvas[top:top + nh, left:left + nw] = resized
     
-    # Return canvas for backend, but meta for batch processing
     meta = dict(
         orig_h=h, orig_w=w, target_h=target_h, target_w=target_w,
         scale=scale, top=top, left=left
     )
     return canvas, meta
 
-# ============================================================
-# >>> FUNCTION FOR YOUR BACKEND <<<
-# ============================================================
+
 def preprocess_single_image_bytes(
     img_bytes: bytes, 
     apply_clahe: bool = True
@@ -65,9 +59,9 @@ def preprocess_single_image_bytes(
         apply_clahe: If True, applies the medianBlur + CLAHE step.
     """
     
-    img = None # This will hold our uint8 grayscale image
+    img = None 
 
-    # --- 1. Try to read as DICOM ---
+  
     if HAVE_PYDICOM:
         try:
             ds = pydicom.dcmread(io.BytesIO(img_bytes))
@@ -93,7 +87,6 @@ def preprocess_single_image_bytes(
         except Exception:
             img = None
 
-    # --- 2. Fallback to standard image (JPG, PNG, etc.) ---
     if img is None:
         try:
             np_arr = np.frombuffer(img_bytes, np.uint8)
@@ -102,20 +95,17 @@ def preprocess_single_image_bytes(
         except Exception as e:
             raise ValueError(f"Could not decode image. Not a valid DICOM or image file. Error: {e}")
 
-    # --- 3. Apply CLAHE (or not) ---
+
     if apply_clahe:
         img_processed = clahe_enhance(img)
     else:
-        img_processed = img # Skip CLAHE
+        img_processed = img 
 
-    # --- 4. Resize + Pad ---
-    # We only need the canvas, not the 'meta' dict
+
     canvas, _ = resize_keep_ar_pad(img_processed, TARGET_H, TARGET_W)
     return canvas
 
-# ============================================================
-# (The rest is your original script for batch-processing)
-# ============================================================
+
 def ensure_dir(p: str):
     pathlib.Path(p).mkdir(parents=True, exist_ok=True)
 
@@ -166,7 +156,7 @@ def read_image_with_meta(path):
     return img, meta
 
 def process_images(in_dir, out_dir):
-    INPUT_DIR = "/content/roboflow" # Or wherever your batch images are
+    INPUT_DIR = "/content/roboflow"
     OUT_DIR = "/content/roboflow"
     if not in_dir or not os.path.isdir(in_dir):
         print(f"[ERROR] Folder missing: {in_dir}")
@@ -185,10 +175,9 @@ def process_images(in_dir, out_dir):
             img_clahe = clahe_enhance(img)
             canvas, geom = resize_keep_ar_pad(img_clahe, TARGET_H, TARGET_W) 
             
-            # --- THIS WAS THE MISSING LINE ---
-            base = pathlib.Path(src).stem
-            # -----------------------------------
             
+            base = pathlib.Path(src).stem
+           
             out_name = f"{base}.png"
             cv2.imwrite(os.path.join(save_dir, out_name), canvas)
             
@@ -219,7 +208,7 @@ def process_images(in_dir, out_dir):
         print("⚠️ No images processed.")
 
 def main():
-    # Example paths, change these as needed
+   
     INPUT_DIR = "/content/roboflow" 
     OUT_DIR = "/content/roboflow"
     if "<PATH_" in INPUT_DIR or "<PATH_" in OUT_DIR:
